@@ -39,7 +39,7 @@ android {
 }
 
 dependencies {
-    compileOnly("com.github.tachiyomiorg:extensions-lib:1.4.2")
+    compileOnly("com.github.tachiyomiorg:extensions-lib:1.4")
     compileOnly("org.jetbrains.kotlin:kotlin-stdlib:1.9.24")
     compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.11")
     compileOnly("org.jsoup:jsoup:1.16.2")
