@@ -2,7 +2,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application") version "8.5.2"
-    id("org.jetbrains.kotlin.android") version "1.9.24"
+    id("org.jetbrains.kotlin.android") version "2.3.10"
 }
 
 val cfg = Properties().apply { file("config.properties").inputStream().use { load(it) } }
@@ -30,17 +30,20 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "1.8"
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
 dependencies {
     compileOnly("com.github.keiyoushi:extensions-lib:18a8e26be2")
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:1.9.24")
+    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.3.10")
     compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.11")
     compileOnly("org.jsoup:jsoup:1.16.2")
     compileOnly("io.reactivex:rxjava:1.3.8")
