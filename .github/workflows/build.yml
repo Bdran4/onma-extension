@@ -30,7 +30,7 @@ jobs:
         run: gradle assembleDebug --no-daemon
 
       - name: Make repository files
-        run: python3 tools.py index
+        run: python3 tools.py index && python3 repo_meta.py
 
       - name: Publish to repo branch
         run: |
