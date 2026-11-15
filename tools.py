@@ -63,6 +63,7 @@ def index():
             "lang": c["lang"],
             "id": source_id(c["extName"], c["lang"]),
             "baseUrl": c["baseUrl"],
+            "versionId": 1,
         }],
     }]
     with open("repo_out/index.min.json", "w", encoding="utf-8") as f:
