@@ -48,7 +48,7 @@ class Onma : HttpSource() {
     private val pageImgSel = "div#all img.img-responsive, div#all img"
     // ----------------------------------------
 
-    override val client = network.cloudflareClient
+    
 
     override fun headersBuilder() = super.headersBuilder()
         .add("Referer", "$baseUrl/")
