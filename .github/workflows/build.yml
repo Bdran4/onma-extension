@@ -1,0 +1,44 @@
+name: Build extension
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Make icons
+        run: python3 tools.py icons
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Make repository files
+        run: python3 tools.py index
+
+      - name: Publish to repo branch
+        run: |
+          cd repo_out
+          git init -b repo
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit -m "Update repository"
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push --force origin repo
