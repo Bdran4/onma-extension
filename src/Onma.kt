@@ -2,17 +2,21 @@ package eu.kanade.tachiyomi.extension.ar.onma
 
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.source.model.FilterList
+import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
-import eu.kanade.tachiyomi.source.online.ParsedHttpSource
+import eu.kanade.tachiyomi.source.online.HttpSource
 import okhttp3.Request
+import okhttp3.Response
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-class Onma : ParsedHttpSource() {
+class Onma : HttpSource() {
 
     // ---------------- CONFIG ----------------
     override val name = "Onma"
@@ -24,6 +28,7 @@ class Onma : ParsedHttpSource() {
     private val latestPath = "/latest-release?page=%d"
 
     private val listSelector = "div.media"
+    private val latestSelector = "div.mainpage-manga"
     private val listTitleSel = "a.chart-title, h5 a, h3 a"
     private val listLinkSel = "a"
     private val listImgSel = "img"
@@ -48,45 +53,66 @@ class Onma : ParsedHttpSource() {
     override fun headersBuilder() = super.headersBuilder()
         .add("Referer", "$baseUrl/")
 
+    private fun Response.toDoc(): Document =
+        Jsoup.parse(body.string(), request.url.toString())
+
+    private fun relUrl(absolute: String): String =
+        "/" + absolute.trim().substringAfter("://").substringAfter("/", "")
+
+    // ---------- Popular ----------
     override fun popularMangaRequest(page: Int): Request =
         GET(baseUrl + popularPath.format(page), headers)
 
-    override fun popularMangaSelector() = listSelector
-    override fun popularMangaNextPageSelector() = nextPageSel
-    override fun popularMangaFromElement(element: Element) = mangaFromElement(element)
+    override fun popularMangaParse(response: Response): MangasPage =
+        parseList(response.toDoc(), listSelector)
 
+    // ---------- Latest ----------
     override fun latestUpdatesRequest(page: Int): Request =
         GET(baseUrl + latestPath.format(page), headers)
 
-    override fun latestUpdatesSelector() = "div.mainpage-manga"
-    override fun latestUpdatesNextPageSelector() = nextPageSel
-    override fun latestUpdatesFromElement(element: Element) = mangaFromElement(element)
+    override fun latestUpdatesParse(response: Response): MangasPage =
+        parseList(response.toDoc(), latestSelector)
 
-    override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request =
-        GET(baseUrl + "/filterList?page=$page&alpha=$query&sortBy=name&asc=true", headers)
+    // ---------- Search ----------
+    override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request {
+        val q = URLEncoder.encode(query, "UTF-8")
+        return GET("$baseUrl/filterList?page=$page&alpha=$q&sortBy=name&asc=true", headers)
+    }
 
-    override fun searchMangaSelector() = listSelector
-    override fun searchMangaNextPageSelector() = nextPageSel
-    override fun searchMangaFromElement(element: Element) = mangaFromElement(element)
+    override fun searchMangaParse(response: Response): MangasPage =
+        parseList(response.toDoc(), listSelector)
 
-    private fun mangaFromElement(element: Element): SManga = SManga.create().apply {
+    private fun parseList(doc: Document, itemSel: String): MangasPage {
+        val mangas = doc.select(itemSel).mapNotNull { el ->
+            runCatching { mangaFromElement(el) }.getOrNull()
+        }
+        return MangasPage(mangas, doc.selectFirst(nextPageSel) != null)
+    }
+
+    private fun mangaFromElement(element: Element): SManga {
         val a = element.selectFirst(listLinkSel)!!
-        setUrlWithoutDomain(a.attr("href"))
-        title = element.selectFirst(listTitleSel)?.text()?.trim()
-            ?: element.selectFirst(listImgSel)?.attr("alt").orEmpty()
-        thumbnail_url = element.selectFirst(listImgSel)?.let { img ->
-            img.absUrl("data-src").ifEmpty { img.absUrl("src") }
+        val img = element.selectFirst(listImgSel)
+        return SManga.create().apply {
+            url = relUrl(a.absUrl("href"))
+            title = element.selectFirst(listTitleSel)?.text()?.trim()
+                ?: img?.attr("alt").orEmpty()
+            thumbnail_url = img?.let { i ->
+                i.absUrl("data-src").ifEmpty { i.absUrl("src") }
+            }
         }
     }
 
-    override fun mangaDetailsParse(document: Document): SManga = SManga.create().apply {
-        title = document.selectFirst(detailTitleSel)!!.text().trim()
-        thumbnail_url = document.selectFirst(detailCoverSel)?.absUrl("src")
-        description = document.selectFirst(detailDescSel)?.text()?.trim()
-        genre = document.select(detailGenreSel).joinToString(", ") { it.text() }
-        author = document.selectFirst(detailAuthorSel)?.text()
-        status = parseStatus(document.selectFirst(detailStatusSel)?.text().orEmpty())
-        initialized = true
+    // ---------- Details ----------
+    override fun mangaDetailsParse(response: Response): SManga {
+        val document = response.toDoc()
+        return SManga.create().apply {
+            title = document.selectFirst(detailTitleSel)?.text()?.trim().orEmpty()
+            thumbnail_url = document.selectFirst(detailCoverSel)?.absUrl("src")
+            description = document.selectFirst(detailDescSel)?.text()?.trim()
+            genre = document.select(detailGenreSel).joinToString(", ") { it.text() }
+            author = document.selectFirst(detailAuthorSel)?.text()
+            status = parseStatus(document.selectFirst(detailStatusSel)?.text().orEmpty())
+        }
     }
 
     private fun parseStatus(s: String): Int = when {
@@ -95,25 +121,28 @@ class Onma : ParsedHttpSource() {
         else -> SManga.UNKNOWN
     }
 
-    override fun chapterListSelector() = chapterListSel
-
-    override fun chapterFromElement(element: Element): SChapter = SChapter.create().apply {
-        val a = element.selectFirst(chapterLinkSel)!!
-        setUrlWithoutDomain(a.attr("href"))
-        name = a.text().trim()
-        date_upload = parseDate(element.selectFirst(chapterDateSel)?.text().orEmpty())
-    }
+    // ---------- Chapters ----------
+    override fun chapterListParse(response: Response): List<SChapter> =
+        response.toDoc().select(chapterListSel).map { el ->
+            val a = el.selectFirst(chapterLinkSel)!!
+            SChapter.create().apply {
+                url = relUrl(a.absUrl("href"))
+                name = a.text().trim()
+                date_upload = parseDate(el.selectFirst(chapterDateSel)?.text().orEmpty())
+            }
+        }
 
     private fun parseDate(s: String): Long =
         runCatching { DATE_FORMAT.parse(s.trim())?.time }.getOrNull() ?: 0L
 
-    override fun pageListParse(document: Document): List<Page> =
-        document.select(pageImgSel).mapIndexed { i, img ->
-            val url = img.absUrl("data-src").ifEmpty { img.absUrl("src") }
-            Page(i, "", url.trim())
+    // ---------- Pages ----------
+    override fun pageListParse(response: Response): List<Page> =
+        response.toDoc().select(pageImgSel).mapIndexed { i, img ->
+            val u = img.absUrl("data-src").ifEmpty { img.absUrl("src") }
+            Page(i, "", u.trim())
         }
 
-    override fun imageUrlParse(document: Document): String =
+    override fun imageUrlParse(response: Response): String =
         throw UnsupportedOperationException("Not used.")
 
     companion object {
