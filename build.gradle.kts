@@ -39,11 +39,11 @@ android {
 }
 
 dependencies {
-    compileOnly("com.github.tachiyomiorg:extensions-lib:1.4")
+    compileOnly("com.github.keiyoushi:extensions-lib:1.4.5")
     compileOnly("org.jetbrains.kotlin:kotlin-stdlib:1.9.24")
     compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.11")
     compileOnly("org.jsoup:jsoup:1.16.2")
     compileOnly("io.reactivex:rxjava:1.3.8")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-    compileOnly("com.github.inorichi.injekt:injekt-core:65b0440")
+    compileOnly("com.github.mihonapp:injekt:91edab2317")
 }
